@@ -19,5 +19,17 @@
         <key name="ws-indicator-padding" type="i">
             <default>6</default>
         </key>
+        <key name="panel-position" type="s">
+            <default>'left'</default>
+        </key>
+        <key name="position-index" type="i">
+            <default>0</default>
+        </key>
+        <key name="dot-size" type="i">
+            <default>14</default>
+        </key>
+        <key name="active-color" type="s">
+            <default>''</default>
+        </key>
     </schema>
 </schemalist>

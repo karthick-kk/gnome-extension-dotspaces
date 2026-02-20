@@ -1,50 +1,61 @@
-'use strict';
+import Gio from 'gi://Gio';
+import Gtk from 'gi://Gtk';
 
-const { Adw, Gio, GLib, Gtk } = imports.gi;
+import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-const ExtensionUtils = imports.misc.extensionUtils;
-const Me = ExtensionUtils.getCurrentExtension();
-const { DotspaceSettings } = Me.imports.settings;
+import { DotspaceSettings } from './settings.js';
 
-/**
- * Like `extension.js` this is used for any one-time setup like translations.
- *
- * @param {ExtensionMeta} meta - An extension meta object, described below.
- */
-function init(meta) { }
+export default class DotspacesPreferences extends ExtensionPreferences {
+    fillPreferencesWindow(window) {
+        const dotspaceSettings = this.getSettings();
+        const builder = new Gtk.Builder();
 
-/**
- * This function is called when the preferences window is first created to fill
- * the `Adw.PreferencesWindow`.
- *
- * This function will only be called by GNOME 42 and later. If this function is
- * present, `buildPrefsWidget()` will never be called.
- *
- * @param {Adw.PreferencesWindow} window - The preferences window
- */
-function fillPreferencesWindow(window) {
-    const dotspaceSettings = DotspaceSettings.getNewSchema();
-    const builder = new Gtk.Builder();
-    
-    // Add the ui file
-    builder.add_from_file(`${Me.path}/ui/main.xml`);
-    
-    // Add the general settings
-    window.add(builder.get_object('general'));
+        // Add the ui file
+        builder.add_from_file(`${this.path}/ui/main.xml`);
 
-    // Bind settings to switches
-    DotspaceSettings.getKeys().forEach(key => {
-        const widget = builder.get_object(key.replaceAll('-', '_'));
-        switch (key) {
-            case DotspaceSettings.WS_INDICATOR_PADDING:
-                widget.set_value(dotspaceSettings.get_int(key));
-                widget.connect('value-changed', (w) => {
-                    dotspaceSettings.set_int(key, w.get_value());
-                });
-                break;
-            default:
-                dotspaceSettings.bind(key, widget, 'active', Gio.SettingsBindFlags.DEFAULT);
-                break;
-        }
-    });
+        // Add the general settings
+        window.add(builder.get_object('general'));
+
+        // Bind settings to switches
+        const positionValues = ['left', 'center', 'right'];
+
+        DotspaceSettings.getKeys().forEach(key => {
+            const widget = builder.get_object(key.replaceAll('-', '_'));
+            switch (key) {
+                case DotspaceSettings.WS_INDICATOR_PADDING:
+                    widget.set_value(dotspaceSettings.get_int(key));
+                    widget.connect('value-changed', (w) => {
+                        dotspaceSettings.set_int(key, w.get_value());
+                    });
+                    break;
+                case DotspaceSettings.POSITION_INDEX:
+                    widget.set_value(dotspaceSettings.get_int(key));
+                    widget.connect('value-changed', (w) => {
+                        dotspaceSettings.set_int(key, w.get_value());
+                    });
+                    break;
+                case DotspaceSettings.DOT_SIZE:
+                    widget.set_value(dotspaceSettings.get_int(key));
+                    widget.connect('value-changed', (w) => {
+                        dotspaceSettings.set_int(key, w.get_value());
+                    });
+                    break;
+                case DotspaceSettings.ACTIVE_COLOR:
+                    widget.set_text(dotspaceSettings.get_string(key));
+                    widget.connect('changed', (w) => {
+                        dotspaceSettings.set_string(key, w.get_text());
+                    });
+                    break;
+                case DotspaceSettings.PANEL_POSITION:
+                    widget.set_selected(positionValues.indexOf(dotspaceSettings.get_string(key)));
+                    widget.connect('notify::selected', (w) => {
+                        dotspaceSettings.set_string(key, positionValues[w.selected]);
+                    });
+                    break;
+                default:
+                    dotspaceSettings.bind(key, widget, 'active', Gio.SettingsBindFlags.DEFAULT);
+                    break;
+            }
+        });
+    }
 }

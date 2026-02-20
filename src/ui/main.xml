@@ -6,6 +6,26 @@
         <property name="step_increment">1</property>
     </object>
 
+    <object class="GtkAdjustment" id="position_index_adjustment">
+        <property name="lower">0</property>
+        <property name="upper">20</property>
+        <property name="step_increment">1</property>
+    </object>
+
+    <object class="GtkAdjustment" id="dot_size_adjustment">
+        <property name="lower">6</property>
+        <property name="upper">30</property>
+        <property name="step_increment">1</property>
+    </object>
+
+    <object class="GtkStringList" id="panel_position_model">
+        <items>
+            <item>Left</item>
+            <item>Center</item>
+            <item>Right</item>
+        </items>
+    </object>
+
     <object class="AdwPreferencesPage" id="general">
         <child>
             <object class="AdwPreferencesGroup">
@@ -77,6 +97,59 @@
                             <object class="GtkSpinButton" id="ws_indicator_padding">
                                 <property name="valign">center</property>
                                 <property name="adjustment">ws_indicator_padding_adjustment</property>
+                            </object>
+                        </child>
+                    </object>
+                </child>
+            </object>
+        </child>
+        <child>
+            <object class="AdwPreferencesGroup">
+                <property name="title">Appearance</property>
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title">Dot Size</property>
+                        <property name="subtitle">Size of the workspace dot icons in pixels</property>
+                        <child>
+                            <object class="GtkSpinButton" id="dot_size">
+                                <property name="valign">center</property>
+                                <property name="adjustment">dot_size_adjustment</property>
+                            </object>
+                        </child>
+                    </object>
+                </child>
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title">Active Dot Color</property>
+                        <property name="subtitle">CSS color for the active dot (e.g. #3584e4). Leave empty for theme default.</property>
+                        <child>
+                            <object class="GtkEntry" id="active_color">
+                                <property name="valign">center</property>
+                                <property name="placeholder-text">#3584e4</property>
+                            </object>
+                        </child>
+                    </object>
+                </child>
+            </object>
+        </child>
+        <child>
+            <object class="AdwPreferencesGroup">
+                <property name="title">Position</property>
+                <child>
+                    <object class="AdwComboRow" id="panel_position">
+                        <property name="title">Panel Position</property>
+                        <property name="subtitle">Which section of the panel to place the dots in</property>
+                        <property name="model">panel_position_model</property>
+                    </object>
+                </child>
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title">Position Index</property>
+                        <property name="subtitle">Order within the chosen panel section (0 = first)</property>
+                        <child>
+                            <object class="GtkSpinButton" id="position_index">
+                                <property name="valign">center</property>
+                                <property name="adjustment">position_index_adjustment</property>
                             </object>
                         </child>
                     </object>

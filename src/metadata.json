@@ -3,9 +3,9 @@
   "description": "A simple workspace switcher",
   "uuid": "dotspaces@charlieqle",
   "shell-version": [
-    "42",
-    "43",
-    "44"
+    "48",
+    "49",
+    "50"
   ],
   "url": "https://github.com/CharlieQLe/gnome-extension-dotspaces",
   "settings-schema": "org.gnome.shell.extensions.dotspaces"

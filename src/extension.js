@@ -1,5 +1,3 @@
-'use strict';
-
 /* extension.js
  *
  * This program is free software: you can redistribute it and/or modify
@@ -18,62 +16,94 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-/* exported init */
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
-const Main = imports.ui.main;
-const ExtensionUtils = imports.misc.extensionUtils;
-const Me = ExtensionUtils.getCurrentExtension();
-const Dotspaces = Me.imports.dotspaces;
-const { DotspaceSettings } = Me.imports.settings;
+import { DotspaceContainer } from './dotspaces.js';
+import { DotspaceSettings } from './settings.js';
 
-class Extension {
-    constructor(uuid) {
-        this._uuid = uuid;
-    }
-
+export default class DotspacesExtension extends Extension {
     enable() {
-        this._dotspaceSettings = new DotspaceSettings();
+        this._settings = this.getSettings();
+        this._dotspaceSettings = new DotspaceSettings(this._settings);
+        this._currentBox = null;
+        this._settingsSignalIds = [];
 
         // Handle visibility of activities
-        this._dotspaceSettings.onChangedKeepActivities(this._updateDotspaces.bind(this));
-        this._dotspaceSettings.onChangedPanelScroll(this._updateDotspaces.bind(this));
+        this._settingsSignalIds.push(
+            this._dotspaceSettings.onChangedKeepActivities(this._updateDotspaces.bind(this)),
+            this._dotspaceSettings.onChangedPanelScroll(this._updateDotspaces.bind(this)),
+            this._dotspaceSettings.onChangedPanelPosition(this._updateDotspaces.bind(this)),
+            this._dotspaceSettings.onChangedPositionIndex(this._updateDotspaces.bind(this)),
+        );
 
         // Modify panel
         this._updateDotspaces();
     }
 
     disable() {
+        // Disconnect settings signals
+        for (const id of this._settingsSignalIds)
+            this._dotspaceSettings.disconnect(id);
+        this._settingsSignalIds = [];
+
         if (this._dotspaces) {
-            Main.panel._leftBox.remove_child(this._dotspaces);
+            if (this._currentBox)
+                this._currentBox.remove_child(this._dotspaces);
             this._dotspaces.destroy();
             this._dotspaces = null;
         }
+        this._currentBox = null;
         ToggleActivities(true);
         this._dotspaceSettings = null;
+        this._settings = null;
+    }
+
+    _getPanelBox(position) {
+        switch (position) {
+            case 'center': return Main.panel._centerBox;
+            case 'right': return Main.panel._rightBox;
+            default: return Main.panel._leftBox;
+        }
     }
 
     _updateDotspaces() {
-        this._dotspaces?.destroy();
-        this._dotspaces = new Dotspaces.DotspaceContainer();
-        let position = 0;
+        if (this._dotspaces) {
+            if (this._currentBox)
+                this._currentBox.remove_child(this._dotspaces);
+            this._dotspaces.destroy();
+        }
+
+        this._dotspaces = new DotspaceContainer(this.path, this._settings);
+
+        const position = this._dotspaceSettings.panelPosition;
+        let index = this._dotspaceSettings.positionIndex;
+        const box = this._getPanelBox(position);
+        this._currentBox = box;
+
         if (this._dotspaceSettings.keepActivities) {
             ToggleActivities(true);
-            position = 1;
-        } else ToggleActivities(false);
-        Main.panel._leftBox.insert_child_at_index(this._dotspaces, position);
-    }
-}
+            // Offset index when in the left box so dots appear after Activities
+            if (position === 'left')
+                index = Math.max(index, 1);
+        } else {
+            ToggleActivities(false);
+        }
 
-function init(meta) {
-    return new Extension(meta.uuid);
+        // Clamp index to valid range
+        const childCount = box.get_n_children();
+        index = Math.min(index, childCount);
+
+        box.insert_child_at_index(this._dotspaces, index);
+    }
 }
 
 /**
  * Toggle the display of the activities button.
- * 
+ *
  * @param {Boolean} display
  */
- function ToggleActivities(display) {
+function ToggleActivities(display) {
     const activities_button = Main.panel.statusArea['activities'];
     if (activities_button) {
         if (display && !Main.sessionMode.isLocked) activities_button.container.show();

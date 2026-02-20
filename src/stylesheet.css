@@ -1,3 +1,11 @@
+.dotspaces-indicator {
+  transition-duration: 150ms;
+}
+
+.dotspaces-indicator:hover {
+  opacity: 200;
+}
+
 .dotspaces-indicator:active {
   box-shadow: none;
 }

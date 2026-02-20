@@ -1,18 +1,19 @@
-'use strict';
+import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+import GObject from 'gi://GObject';
+import St from 'gi://St';
 
-const { Clutter, Gio, GLib, GObject, St } = imports.gi;
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-const Main = imports.ui.main;
-const ExtensionUtils = imports.misc.extensionUtils;
-const Me = ExtensionUtils.getCurrentExtension();
-const { DotspaceSettings, MutterSettings } = Me.imports.settings;
+import { DotspaceSettings, MutterSettings } from './settings.js';
 
 class DotIndicator extends St.Bin {
     static {
         GObject.registerClass(this);
     }
 
-    _init(index, dotspaceSettings, mutterSettings) {
+    _init(index, extensionPath, dotspaceSettings, mutterSettings) {
         super._init({
             visible: true,
             reactive: true,
@@ -20,6 +21,7 @@ class DotIndicator extends St.Bin {
             track_hover: true
         });
         this._index = index;
+        this._extensionPath = extensionPath;
 
         // Set the settings
         this._dotspaceSettings = dotspaceSettings;
@@ -31,6 +33,19 @@ class DotIndicator extends St.Bin {
         // Set the icon
         this._icon = null;
 
+        // State tracking for animation
+        this._initialized = false;
+        this._wasActive = this._workspace.active;
+        this._pendingTimeoutId = null;
+
+        // Cache icons
+        this._iconCache = {
+            'active': Gio.Icon.new_for_string(`${this._extensionPath}/icons/active-symbolic.svg`),
+            'inactive-occupied': Gio.Icon.new_for_string(`${this._extensionPath}/icons/inactive-occupied-symbolic.svg`),
+            'inactive-unoccupied': Gio.Icon.new_for_string(`${this._extensionPath}/icons/inactive-unoccupied-symbolic.svg`),
+            'dynamic': Gio.Icon.new_for_string(`${this._extensionPath}/icons/dynamic-symbolic.svg`),
+        };
+
         // Add styles
         this.add_style_class_name("panel-button");
         this.add_style_class_name("dotspaces-indicator");
@@ -41,9 +56,16 @@ class DotIndicator extends St.Bin {
         this.connect('destroy', () => {
             if (this._notifyActiveSignal) this._workspace.disconnect(this._notifyActiveSignal);
             if (this._notifyNWindowsSignal) this._workspace.disconnect(this._notifyNWindowsSignal);
+            if (this._pendingTimeoutId) {
+                GLib.source_remove(this._pendingTimeoutId);
+                this._pendingTimeoutId = null;
+            }
         });
         this._notifyNWindowsSignal = this._workspace.connect_after('notify::n-windows', () => {
-            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1, () => {
+            if (this._pendingTimeoutId)
+                GLib.source_remove(this._pendingTimeoutId);
+            this._pendingTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1, () => {
+                this._pendingTimeoutId = null;
                 this.update();
                 return GLib.SOURCE_REMOVE;
             });
@@ -52,6 +74,24 @@ class DotIndicator extends St.Bin {
 
         // Update icons
         this.update();
+        this._initialized = true;
+    }
+
+    _animateIconSwap(gicon, giconSize) {
+        this._icon.ease({
+            opacity: 0,
+            duration: 150,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            onComplete: () => {
+                this._icon.set_gicon(gicon);
+                this._icon.icon_size = giconSize;
+                this._icon.ease({
+                    opacity: 255,
+                    duration: 150,
+                    mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                });
+            },
+        });
     }
 
     update() {
@@ -67,14 +107,15 @@ class DotIndicator extends St.Bin {
 
         // Default gicon settings
         let giconName = "inactive-unoccupied";
-        let giconSize = 14;
+        const dotSize = this._dotspaceSettings.dotSize;
+        let giconSize = dotSize;
 
         // Handle active workspace
         if (this._workspace.active) {
             giconName = "active";
             this.add_style_pseudo_class("active");
             this._buttonSignal = this.connect('button-release-event', () => {
-                if (Main.overview._visible) Main.overview.hide();
+                if (Main.overview.visible) Main.overview.hide();
                 else Main.overview.show();
             });
         } else {
@@ -82,72 +123,103 @@ class DotIndicator extends St.Bin {
             this.remove_style_pseudo_class("active");
             this._buttonSignal = this.connect('button-release-event', () => this._workspace.activate(global.get_current_time()));
         }
-        
+
         // Handle dynamic (last if dynamic) workspace
         if (this._mutterSettings.dynamicWorkspaces && this._index === global.workspace_manager.get_n_workspaces() - 1) {
             this.add_style_class_name("dynamic");
             giconName = "dynamic";
-            giconSize = 12;
+            giconSize = Math.round(dotSize * 0.85);
         } else this.remove_style_class_name("dynamic");
 
-        // Create or set the icon  
-        const gicon = Gio.Icon.new_for_string(`${Me.path}/icons/${giconName}-symbolic.svg`);
+        // Detect active state change for animation
+        const isActive = this._workspace.active;
+        const activeStateChanged = this._wasActive !== isActive;
+        this._wasActive = isActive;
+
+        // Create or set the icon
+        const gicon = this._iconCache[giconName];
+        const activeColor = this._dotspaceSettings.activeColor;
         if (this._icon == null) {
             this._icon = new St.Icon({ gicon: gicon, icon_size: giconSize });
+            if (isActive && activeColor)
+                this._icon.set_style(`color: ${activeColor};`);
             this.set_child(this._icon);
-        } else this._icon.set_gicon(gicon);
+        } else if (this._initialized && activeStateChanged) {
+            this._animateIconSwap(gicon, giconSize);
+            if (isActive && activeColor)
+                this._icon.set_style(`color: ${activeColor};`);
+            else
+                this._icon.set_style(null);
+        } else {
+            this._icon.set_gicon(gicon);
+            if (isActive && activeColor)
+                this._icon.set_style(`color: ${activeColor};`);
+            else
+                this._icon.set_style(null);
+        }
     }
 }
 
-var DotspaceContainer = class DotspaceContainer extends St.BoxLayout {
+export class DotspaceContainer extends St.BoxLayout {
     static {
         GObject.registerClass(this);
     }
 
-    _init() {
+    _init(extensionPath, settings) {
         super._init({
             track_hover: true,
             reactive: true
         });
 
+        this._extensionPath = extensionPath;
         this._dots = [];
-        
+
         // Get settings
-        this._dotspaceSettings = new DotspaceSettings();
+        this._dotspaceSettings = new DotspaceSettings(settings);
         this._mutterSettings = new MutterSettings();
-        
-        // Create the box to hold the dots 
+
+        // Create the box to hold the dots
         this.add_style_class_name("panel-button");
-	    this.add_style_class_name("dotspaces-container");
-        
+        this.add_style_class_name("dotspaces-container");
+
         // Handle scroll event
         const scrollEventSource = this._dotspaceSettings.panelScroll ? Main.panel : this;
         this._scrollEventId = scrollEventSource.connect("scroll-event", this._OnScroll.bind(this));
 
         // Handle setting events
-        this._dotspaceSettings.onChangedIgnoreInactiveOccupiedWorkspaces(this._RebuildDots.bind(this));
-        this._dotspaceSettings.onChangedHideDotsOnSingle(this._RebuildDots.bind(this));
-        this._dotspaceSettings.onChangedWsIndicatorPadding(this._RebuildDots.bind(this));
-        this._mutterSettings.onChangedDynamicWorkspaces(this._RebuildDots.bind(this));
-        
+        this._settingsSignalIds = [
+            this._dotspaceSettings.onChangedIgnoreInactiveOccupiedWorkspaces(this._RebuildDots.bind(this)),
+            this._dotspaceSettings.onChangedHideDotsOnSingle(this._RebuildDots.bind(this)),
+            this._dotspaceSettings.onChangedWsIndicatorPadding(this._RebuildDots.bind(this)),
+            this._dotspaceSettings.onChangedDotSize(this._RebuildDots.bind(this)),
+            this._dotspaceSettings.onChangedActiveColor(this._RebuildDots.bind(this)),
+        ];
+        this._mutterSignalIds = [
+            this._mutterSettings.onChangedDynamicWorkspaces(this._RebuildDots.bind(this)),
+        ];
+
         // Handle workspace events
         this._notifyNWorkspacesId = global.workspace_manager.connect_after("notify::n-workspaces", this._RebuildDots.bind(this));
 
         // Handle destroy event
         this.connect("destroy", () => {
+            for (const id of this._settingsSignalIds)
+                this._dotspaceSettings.disconnect(id);
+            for (const id of this._mutterSignalIds)
+                this._mutterSettings.disconnect(id);
             if (this._notifyNWorkspacesId) global.workspace_manager.disconnect(this._notifyNWorkspacesId);
             if (this._scrollEventId) scrollEventSource.disconnect(this._scrollEventId);
         });
 
         // Rebuild dots
-	    this._RebuildDots();
+        this._RebuildDots();
     }
 
     /**
      * Handle the scroll event.
-     * 
-     * @param {*} _ 
-     * @param {Clutter.Event} event 
+     *
+     * @param {*} _
+     * @param {Clutter.Event} event
      */
     _OnScroll(_, event) {
         // Increment or decrement the index
@@ -163,7 +235,7 @@ var DotspaceContainer = class DotspaceContainer extends St.BoxLayout {
             index %= workspaceCount;
             if (index < 0) index += workspaceCount;
         } else index = Math.min(Math.max(index, 0), workspaceCount);
-        
+
         // Change the workspace
         if (index >= 0 && index < workspaceCount) global.workspace_manager.get_workspace_by_index(index).activate(global.get_current_time());
     }
@@ -178,14 +250,14 @@ var DotspaceContainer = class DotspaceContainer extends St.BoxLayout {
 
         // Get settings
         const dynamicWorkspacesEnabled = this._mutterSettings.dynamicWorkspaces;
-        
+
         // Update workspace information
         const workspaceCount = global.workspace_manager.get_n_workspaces();
 
         // Create dots
         for (let i = 0; i < workspaceCount; i++) {
-            const dot = new DotIndicator(i, this._dotspaceSettings, this._mutterSettings);
-            this.add_actor(dot);
+            const dot = new DotIndicator(i, this._extensionPath, this._dotspaceSettings, this._mutterSettings);
+            this.add_child(dot);
             this._dots.push(dot);
         }
 

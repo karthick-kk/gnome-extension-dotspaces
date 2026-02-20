@@ -1,26 +1,28 @@
-'use strict';
+import Gio from 'gi://Gio';
 
-const { Gio } = imports.gi;
-
-var Settings = class Settings {
+export class Settings {
     constructor(schema) {
         this._schema = schema;
     }
 
-    get schema() { 
+    get schema() {
         return this._schema;
     }
 
-    onChanged(key, func) { 
-        this._schema.connect(`changed::${key}`, func); 
+    onChanged(key, func) {
+        return this._schema.connect(`changed::${key}`, func);
     }
 
-    getBoolean(key) { 
-        return this._schema.get_boolean(key); 
+    disconnect(id) {
+        this._schema.disconnect(id);
     }
 
-    setBoolean(key, value) { 
-        this._schema.set_boolean(key, value); 
+    getBoolean(key) {
+        return this._schema.get_boolean(key);
+    }
+
+    setBoolean(key, value) {
+        this._schema.set_boolean(key, value);
     }
 
     getInt(key) {
@@ -30,23 +32,30 @@ var Settings = class Settings {
     setInt(key, value) {
         this._schema.set_int(key, value);
     }
-};
+
+    getString(key) {
+        return this._schema.get_string(key);
+    }
+
+    setString(key, value) {
+        this._schema.set_string(key, value);
+    }
+}
 
 /**
  * Handles settings for this extension.
  */
-var DotspaceSettings = class DotspaceSettings extends Settings {
+export class DotspaceSettings extends Settings {
     static IGNORE_INACTIVE_OCCUPIED_WORKSPACES = "ignore-inactive-occupied-workspaces";
     static KEEP_ACTIVITIES = "keep-activities";
     static PANEL_SCROLL = "panel-scroll";
     static WRAP_WORKSPACES = "wrap-workspaces";
     static HIDE_DOTS_ON_SINGLE = "hide-dots-on-single";
     static WS_INDICATOR_PADDING = "ws-indicator-padding";
-
-    static getNewSchema() {
-        const extensionUtils = imports.misc.extensionUtils;
-        return extensionUtils.getSettings(extensionUtils.getCurrentExtension().metadata['settings-schema']);
-    }
+    static PANEL_POSITION = "panel-position";
+    static POSITION_INDEX = "position-index";
+    static DOT_SIZE = "dot-size";
+    static ACTIVE_COLOR = "active-color";
 
     static getKeys() {
         return [
@@ -56,11 +65,15 @@ var DotspaceSettings = class DotspaceSettings extends Settings {
             this.WRAP_WORKSPACES,
             this.HIDE_DOTS_ON_SINGLE,
             this.WS_INDICATOR_PADDING,
+            this.PANEL_POSITION,
+            this.POSITION_INDEX,
+            this.DOT_SIZE,
+            this.ACTIVE_COLOR,
         ];
     }
-    
-    constructor() { 
-        super(DotspaceSettings.getNewSchema()); 
+
+    constructor(schema) {
+        super(schema);
     }
 
     get ignoreInactiveOccupiedWorkspaces() {
@@ -88,38 +101,66 @@ var DotspaceSettings = class DotspaceSettings extends Settings {
     }
 
     onChangedIgnoreInactiveOccupiedWorkspaces(func) {
-        this.onChanged(DotspaceSettings.IGNORE_INACTIVE_OCCUPIED_WORKSPACES, func);
+        return this.onChanged(DotspaceSettings.IGNORE_INACTIVE_OCCUPIED_WORKSPACES, func);
     }
 
     onChangedKeepActivities(func) {
-        this.onChanged(DotspaceSettings.KEEP_ACTIVITIES, func);
+        return this.onChanged(DotspaceSettings.KEEP_ACTIVITIES, func);
     }
 
     onChangedPanelScroll(func) {
-        this.onChanged(DotspaceSettings.PANEL_SCROLL, func);
+        return this.onChanged(DotspaceSettings.PANEL_SCROLL, func);
     }
 
     onChangedHideDotsOnSingle(func) {
-        this.onChanged(DotspaceSettings.HIDE_DOTS_ON_SINGLE, func);
+        return this.onChanged(DotspaceSettings.HIDE_DOTS_ON_SINGLE, func);
     }
 
     onChangedWsIndicatorPadding(func) {
-        this.onChanged(DotspaceSettings.WS_INDICATOR_PADDING, func);
+        return this.onChanged(DotspaceSettings.WS_INDICATOR_PADDING, func);
     }
-};
+
+    get panelPosition() {
+        return this.getString(DotspaceSettings.PANEL_POSITION);
+    }
+
+    get positionIndex() {
+        return this.getInt(DotspaceSettings.POSITION_INDEX);
+    }
+
+    onChangedPanelPosition(func) {
+        return this.onChanged(DotspaceSettings.PANEL_POSITION, func);
+    }
+
+    onChangedPositionIndex(func) {
+        return this.onChanged(DotspaceSettings.POSITION_INDEX, func);
+    }
+
+    get dotSize() {
+        return this.getInt(DotspaceSettings.DOT_SIZE);
+    }
+
+    get activeColor() {
+        return this.getString(DotspaceSettings.ACTIVE_COLOR);
+    }
+
+    onChangedDotSize(func) {
+        return this.onChanged(DotspaceSettings.DOT_SIZE, func);
+    }
+
+    onChangedActiveColor(func) {
+        return this.onChanged(DotspaceSettings.ACTIVE_COLOR, func);
+    }
+}
 
 /**
  * Handles settings for Mutter.
  */
-var MutterSettings = class MutterSettings extends Settings {
+export class MutterSettings extends Settings {
     static DYNAMIC_WORKSPACES = "dynamic-workspaces";
-    
-    static getNewSchema() {
-        return new Gio.Settings({ schema: 'org.gnome.mutter' });
-    }
 
     constructor() {
-        super(MutterSettings.getNewSchema());
+        super(new Gio.Settings({ schema: 'org.gnome.mutter' }));
     }
 
     get dynamicWorkspaces() {
@@ -127,6 +168,6 @@ var MutterSettings = class MutterSettings extends Settings {
     }
 
     onChangedDynamicWorkspaces(func) {
-        this.onChanged(MutterSettings.DYNAMIC_WORKSPACES, func);
+        return this.onChanged(MutterSettings.DYNAMIC_WORKSPACES, func);
     }
 }
